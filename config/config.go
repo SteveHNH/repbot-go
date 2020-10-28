@@ -27,5 +27,5 @@ func Get() *Config {
 		fmt.Printf("Unable to decode into struct, %v", err)
 	}
 
-	return configuration
+	return &configuration
 }
