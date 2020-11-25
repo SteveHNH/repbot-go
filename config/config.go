@@ -7,24 +7,25 @@ import (
 )
 
 // Config contains the token for the discord bot
-type RepBotConfig struct {
+type Config struct {
 	Token string
 }
 
 // Get reads in the config file and returns a struct
-func Get() *RepBotConfig {
+func Get() *Config {
 	options := viper.New()
 
 	options.SetConfigFile("config")
 	options.AddConfigPath(".")
+	options.AddConfigPath("$HOME/.config/repbot-go")
+	options.AddConfigPath("./config/")
 	options.SetConfigType("yaml")
-	options.SetDefault("token", "someplaceholder")
 
 	if err := options.ReadInConfig(); err != nil {
 		fmt.Printf("Error reading config file: %s", err)
 	}
 
-	return &RepBotConfig{
+	return &Config{
 		Token: options.GetString("token"),
 	}
 }
