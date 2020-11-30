@@ -67,9 +67,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if matched {
 		if m.Author.ID != m.Mentions[0].ID {
 			repInc(m.Mentions[0], m, s)
-		} else {
-			s.ChannelMessageSend(m.ChannelID, "you can't update your own rep")
 		}
+
+		s.ChannelMessageSend(m.ChannelID, "You can't update your own rep")
 	}
 }
 
@@ -92,41 +92,53 @@ func checkUser(u *discordgo.User, db *sql.DB) (result bool, err error) {
 func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session) {
 	db, _ := sql.Open("sqlite3", config.Get().DB)
 	defer db.Close()
+
+	// Check if user exists
 	usercheck, err := checkUser(u, db)
 	if err != nil {
 		log.Printf("Something broke with userCheck: %s", err)
+		return
 	}
+
+	// User doesn't exist yet
 	if usercheck == false {
 		statement, err := db.Prepare(initRep)
 		if err != nil {
 			log.Printf("Unable to prepare sql statement for initRep: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not initialize new user "+u.Username)
+			return
 		}
+
 		_, err = statement.Exec(u.ID, u.Username, 1)
 		if err != nil {
 			log.Printf("initRep execution failed: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not initialize user "+u.Username)
-		} else {
-			s.ChannelMessageSend(m.ChannelID, "Intialized new user with 1 rep! Congrats, "+u.Username)
+			return
 		}
-
-	} else {
-		statement, err := db.Prepare(setRep)
-		if err != nil {
-			log.Printf("Unable to prepare sql statement for repInc: %s", err)
-			s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
-		}
-		_, err = statement.Exec(u.Username, u.ID)
-		if err != nil {
-			log.Printf("repInc execution failed: %s", err)
-			s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
-		} else {
-			rows, _ := db.Query(getRep, u.ID)
-			var repValue int
-			for rows.Next() {
-				rows.Scan(&repValue)
-			}
-			s.ChannelMessageSend(m.ChannelID, "Rep increased to "+strconv.Itoa(repValue)+" for "+u.Username)
-		}
+		s.ChannelMessageSend(m.ChannelID, "Intialized new user with 1 rep! Congrats, "+u.Username)
+		return
 	}
+
+	// User already exists
+	statement, err := db.Prepare(setRep)
+	if err != nil {
+		log.Printf("Unable to prepare sql statement for repInc: %s", err)
+		s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
+		return
+	}
+
+	_, err = statement.Exec(u.Username, u.ID)
+	if err != nil {
+		log.Printf("repInc execution failed: %s", err)
+		s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
+		return
+	}
+
+	rows, _ := db.Query(getRep, u.ID)
+	var repValue int
+	for rows.Next() {
+		rows.Scan(&repValue)
+	}
+	s.ChannelMessageSend(m.ChannelID, "Rep increased to "+strconv.Itoa(repValue)+" for "+u.Username)
+	return
 }
