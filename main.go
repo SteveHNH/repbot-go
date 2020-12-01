@@ -101,35 +101,33 @@ func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session)
 		statement, err := db.Prepare(initRep)
 		if err != nil {
 			fmt.Printf("Unable to prepare sql statement for initRep: %s", err)
-			s.ChannelMessageSend(m.ChannelID, "Could not initialize new user " + u.Username)
+			s.ChannelMessageSend(m.ChannelID, "Could not initialize new user "+u.Username)
 		}
 		_, err = statement.Exec(u.ID, u.Username, 1)
 		if err != nil {
 			fmt.Printf("initRep execution failed: %s", err)
-			s.ChannelMessageSend(m.ChannelID, "Could not initialize user " + u.Username)
+			s.ChannelMessageSend(m.ChannelID, "Could not initialize user "+u.Username)
 		} else {
-			s.ChannelMessageSend(m.ChannelID, "Intialized new user with 1 rep! Congrats, " + u.Username)
+			s.ChannelMessageSend(m.ChannelID, "Intialized new user with 1 rep! Congrats, "+u.Username)
 		}
 
 	} else {
 		statement, err := db.Prepare(setRep)
 		if err != nil {
 			fmt.Printf("Unable to prepare sql statement for repInc: %s", err)
-			s.ChannelMessageSend(m.ChannelID, "Could not update rep for " + u.Username)
+			s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
 		}
 		_, err = statement.Exec(u.Username, u.ID)
 		if err != nil {
 			fmt.Printf("repInc execution failed: %s", err)
-			s.ChannelMessageSend(m.ChannelID, "Could not update rep for " + u.Username)
+			s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
 		} else {
 			rows, _ := db.Query(getRep, u.ID)
 			var repValue int
 			for rows.Next() {
 				rows.Scan(&repValue)
 			}
-			s.ChannelMessageSend(m.ChannelID, "Rep increased to " + strconv.Itoa(repValue) + " for " + u.Username)
+			s.ChannelMessageSend(m.ChannelID, "Rep increased to "+strconv.Itoa(repValue)+" for "+u.Username)
 		}
 	}
 }
-
-
