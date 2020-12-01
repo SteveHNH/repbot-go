@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"syscall"
 
-	config "./config"
+	"github.com/SteveHNH/repbot-go/config"
 	"github.com/bwmarrin/discordgo"
 	_ "github.com/mattn/go-sqlite3"
 )
