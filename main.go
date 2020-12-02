@@ -2,7 +2,7 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"regexp"
@@ -20,10 +20,10 @@ const initRep = `INSERT OR IGNORE into reputation (username, user, rep) values (
 
 func main() {
 	cfg := config.Get()
+
 	dg, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
-		fmt.Println("error creating Discord session:,", err)
-		return
+		log.Fatalf("error creating Discord session: %s", err)
 	}
 
 	dg.AddHandler(messageCreate)
@@ -31,35 +31,33 @@ func main() {
 	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages)
 
 	err = dg.Open()
+	defer dg.Close()
+
 	if err != nil {
-		fmt.Println("error opening connection,", err)
-		return
+		log.Fatalf("error opening Discord connection: %s", err)
 	}
 
-	fmt.Println("Bot is now running. Press CTRL+C to exit.")
+	log.Println("Bot is now running. Press CTRL+C to exit.")
+
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 
-	dg.Close()
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	//notes for me
-	// mention.username: stephen
-	// mention ID: 123423452345
-	// author ID: 1231242134
 
-	var matched bool
-	//trigger := `^\!rep.*`
-	repAdd := `^\!rep\s\<\@\!*\d+\>\s*`
-	repPing := `^\!rep\sping\s*`
-
+	// Ignore repbot's own messages
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
-	//TODO: Remove after debugging
-	fmt.Println(m.Content)
+
+	log.Printf("received message: \"%s\" - @%s ", m.Content, m.Author.Username)
+
+	var matched bool
+	repAdd := `^\!rep\s\<\@\!*\d+\>\s*`
+	repPing := `^\!rep\sping\s*`
+
 	matched, _ = regexp.MatchString(repPing, m.Content)
 	if matched {
 		s.ChannelMessageSend(m.ChannelID, "pong")
@@ -78,8 +76,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 func checkUser(u *discordgo.User, db *sql.DB) (result bool, err error) {
 	rows, err := db.Query(getRep, u.ID)
 	if err != nil {
-		fmt.Printf("Couldn't check for user: %s", err)
+		return false, err
 	}
+
 	var repValue int
 	for rows.Next() {
 		rows.Scan(&repValue)
@@ -95,17 +94,17 @@ func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session)
 	defer db.Close()
 	usercheck, err := checkUser(u, db)
 	if err != nil {
-		fmt.Printf("Something broke with userCheck: %s", err)
+		log.Printf("Something broke with userCheck: %s", err)
 	}
 	if usercheck == false {
 		statement, err := db.Prepare(initRep)
 		if err != nil {
-			fmt.Printf("Unable to prepare sql statement for initRep: %s", err)
+			log.Printf("Unable to prepare sql statement for initRep: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not initialize new user "+u.Username)
 		}
 		_, err = statement.Exec(u.ID, u.Username, 1)
 		if err != nil {
-			fmt.Printf("initRep execution failed: %s", err)
+			log.Printf("initRep execution failed: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not initialize user "+u.Username)
 		} else {
 			s.ChannelMessageSend(m.ChannelID, "Intialized new user with 1 rep! Congrats, "+u.Username)
@@ -114,12 +113,12 @@ func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session)
 	} else {
 		statement, err := db.Prepare(setRep)
 		if err != nil {
-			fmt.Printf("Unable to prepare sql statement for repInc: %s", err)
+			log.Printf("Unable to prepare sql statement for repInc: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
 		}
 		_, err = statement.Exec(u.Username, u.ID)
 		if err != nil {
-			fmt.Printf("repInc execution failed: %s", err)
+			log.Printf("repInc execution failed: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
 		} else {
 			rows, _ := db.Query(getRep, u.ID)
