@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -24,19 +25,37 @@ const getRank = `SELECT user, rep from reputation ORDER BY rep DESC, user ASC`
 const checkDb = `SELECT name FROM sqlite_master WHERE type='table' AND name='reputation';`
 const initDb = `CREATE TABLE reputation (username TEXT PRIMARY KEY, rep INTEGER DEFAULT 0, user VARCHAR);`
 
-// init checks to see if the database needs to be setup before the main function runs
+var configFile string
+var cfg *config.Config
+var datasource string
+var token string
+
+// init zero parses command line flags
+func init() {
+	// No default value
+	flag.StringVar(&configFile, "c", "", "Specify a path to the config file")
+	flag.Parse()
+}
+
+// init the first gets the config data
+func init() {
+	cfg = config.Get(configFile)
+	datasource = cfg.DB
+	token = cfg.Token
+}
+
+// init the second checks to see if the database needs to be setup before the main function runs
 func init() {
 	// Check the sqlite db is setup correctly
 	err := dbCheck()
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 }
 
 func main() {
-	cfg := config.Get()
-
-	dg, err := discordgo.New("Bot " + cfg.Token)
+	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
 		log.Fatalf("error creating Discord session: %s", err)
 	}
@@ -118,7 +137,7 @@ func checkUser(u *discordgo.User, db *sql.DB) (result bool, err error) {
 }
 
 func repRankAll(m *discordgo.MessageCreate, s *discordgo.Session) {
-	db, _ := sql.Open("sqlite3", config.Get().DB)
+	db, _ := sql.Open("sqlite3", datasource)
 	defer db.Close()
 
 	t := table.NewWriter()
@@ -142,7 +161,7 @@ func repRankAll(m *discordgo.MessageCreate, s *discordgo.Session) {
 }
 
 func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session) {
-	db, _ := sql.Open("sqlite3", config.Get().DB)
+	db, _ := sql.Open("sqlite3", datasource)
 	defer db.Close()
 
 	// Check if user exists
@@ -224,7 +243,7 @@ func dbInit(db *sql.DB) error {
 
 // dbCheck opens a db connection, checks to see if the right table exists, and creates one if not
 func dbCheck() error {
-	db, err := sql.Open("sqlite3", config.Get().DB)
+	db, err := sql.Open("sqlite3", datasource)
 	defer db.Close()
 	if err != nil {
 		return err

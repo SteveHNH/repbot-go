@@ -1,9 +1,11 @@
 package config
 
 import (
-	"fmt"
+	"log"
+	"os"
 
 	"github.com/spf13/viper"
+	tilde "gopkg.in/mattes/go-expand-tilde.v1"
 )
 
 // Config contains the token for the discord bot
@@ -13,16 +15,28 @@ type Config struct {
 }
 
 // Get reads in the config file and returns a struct
-func Get() *Config {
+func Get(configFile string) *Config {
 	options := viper.New()
 
-	options.SetConfigName("botconfig")
-	options.AddConfigPath("$HOME/.config/repbot-go/")
-	options.AddConfigPath("./config/")
+	envConfig := os.Getenv("REPBOT_CONFIG")
+
+	if configFile != "" {
+		options.SetConfigFile(configFile)
+	} else if envConfig != "" {
+		e, _ := tilde.Expand(envConfig)
+		options.SetConfigFile(e)
+	} else {
+		log.Println("searching for configfile...")
+		options.SetConfigName("botconfig")
+		options.AddConfigPath("$HOME/.config/repbot-go/")
+		options.AddConfigPath("./config/")
+	}
+
 	options.SetConfigType("yaml")
 
 	if err := options.ReadInConfig(); err != nil {
-		fmt.Printf("Error reading config file: %s \n", err)
+		// Log the error and exit if the config file cannot be parsed
+		log.Fatal(err)
 	}
 
 	return &Config{
