@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -18,17 +17,28 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const dbDriver string = "sqlite3"
+
 const setRep = `UPDATE reputation SET rep = rep + 1, user = ? WHERE username = ?`
 const getRep = `SELECT rep FROM reputation WHERE username = ?`
-const initRep = `INSERT OR IGNORE into reputation (username, user, rep) values (?, ?, ?)`
+const createUser = `INSERT OR IGNORE into reputation (username, user, rep) values (?, ?, ?)`
 const getRank = `SELECT user, rep from reputation ORDER BY rep DESC, user ASC LIMIT 10`
-const checkDb = `SELECT name FROM sqlite_master WHERE type='table' AND name='reputation';`
-const initDb = `CREATE TABLE reputation (username TEXT PRIMARY KEY, rep INTEGER DEFAULT 0, user VARCHAR);`
+const getTbl = `SELECT name FROM sqlite_master WHERE type='table' AND name='reputation';`
+const createTbl = `CREATE TABLE reputation (username TEXT PRIMARY KEY, rep INTEGER DEFAULT 0, user VARCHAR);`
+const getUsers = `SELECT username, user FROM 'reputation';`
+const updateUserName = `UPDATE reputation SET user = ? WHERE username = ?;`
 
 var configFile string
-var cfg *config.Config
-var datasource string
-var token string
+
+type repbotClient struct {
+	cfg        *config.Config
+	ds         *discordgo.Session
+	db         *sql.DB
+	token      string
+	datasource string
+}
+
+var client *repbotClient
 
 // init zero parses command line flags
 func init() {
@@ -37,46 +47,136 @@ func init() {
 	flag.Parse()
 }
 
-// init the first gets the config data
-func init() {
-	cfg = config.Get(configFile)
-	datasource = cfg.DB
-	token = cfg.Token
+func (c *repbotClient) init() (*repbotClient, error) {
+	var err error
+
+	cfg := config.Get(configFile)
+
+	c = &repbotClient{
+		cfg:        cfg,
+		token:      cfg.Token,
+		datasource: cfg.DB,
+	}
+
+	c.ds, err = discordgo.New("Bot " + c.token)
+	if err != nil {
+		return c, fmt.Errorf("error creating Discord session: %s", err)
+	}
+
+	return c, nil
 }
 
 // init the second checks to see if the database needs to be setup before the main function runs
-func init() {
-	// Check the sqlite db is setup correctly
-	err := dbCheck()
+func checkDatabase() {
+	tableExists, err := checkTable(client.db)
+	if err != nil {
+		log.Fatalf("failed checking table 'reputaton' exists: %s", err)
+	}
+
+	if !tableExists {
+		log.Printf("no table 'reputation' found: creating")
+		err := createTable(client.db)
+		if err != nil {
+			log.Fatalf("failed creating table 'reputation': %s", err)
+		}
+	}
+
+	tableExists, err = checkTable(client.db)
+	if err != nil {
+		log.Fatalf("failed checking table 'reputaton' exists: %s", err)
+	}
+
+	if !tableExists {
+		log.Fatalf("database setup failed: table creation failed")
+	}
+}
+
+func updateUsers() {
+	rows, _ := client.db.Query(getUsers)
+
+	var userName string
+	var user string
+	var people map[string]string
+
+	people = make(map[string]string)
+
+	for rows.Next() {
+		rows.Scan(&userName, &user)
+		u, err := client.ds.User(userName)
+		if err != nil {
+			log.Printf("Error retrieving user details: %s\n", err)
+		}
+
+		if u.Username != user {
+			log.Printf("Username Mismatch - User: %s, Discord: %s, Repbot: %s. Queuing for update.\n", userName, u.Username, user)
+
+			// Careful - u.Username is the nick according to Discord
+			// and userName is the ID according to Repbot's db
+			people[userName] = u.Username
+		}
+	}
+
+	if len(people) == 0 {
+		log.Println("No out-of-date users found")
+		return
+	}
+
+	log.Println("Updating out-of-date users")
+	for id, username := range people {
+		statement, err := client.db.Prepare(updateUserName)
+
+		if err != nil {
+			log.Printf("Unable to prepare sql statement for initRep: %s", err)
+		}
+
+		// Careful - u.Username is the nick according to Discord
+		// and userName is the ID according to Repbot's db
+		// "Update reputation set user = username where id = id"
+		_, err = statement.Exec(username, id)
+		if err != nil {
+			log.Printf("user update execution failed: %s", err)
+		}
+
+	}
+}
+
+func main() {
+	var err error
+
+	client = &repbotClient{}
+	client, err = client.init()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-}
+	client.db, err = sql.Open(dbDriver, client.datasource)
+	defer client.db.Close()
 
-func main() {
-	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
-		log.Fatalf("error creating Discord session: %s", err)
+		log.Fatalln(err)
 	}
 
-	dg.AddHandler(messageCreate)
+	// Check if the databse is setup
+	checkDatabase()
 
-	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages)
+	client.ds.AddHandler(messageCreate)
+	client.ds.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages)
 
-	err = dg.Open()
-	defer dg.Close()
-
+	err = client.ds.Open()
+	defer client.ds.Close()
 	if err != nil {
 		log.Fatalf("error opening Discord connection: %s", err)
 	}
+
+	log.Println("checking for user updates from Discord")
+	updateUsers()
+	log.Println("completed checking users for updates")
 
 	log.Println("Bot is now running. Press CTRL+C to exit.")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
-
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -120,8 +220,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 }
 
+// checkUser returns true if the user exists in the db, or false if not
 func checkUser(u *discordgo.User, db *sql.DB) (result bool, err error) {
-	rows, err := db.Query(getRep, u.ID)
+	rows, err := client.db.Query(getRep, u.ID)
 	if err != nil {
 		return false, err
 	}
@@ -136,14 +237,13 @@ func checkUser(u *discordgo.User, db *sql.DB) (result bool, err error) {
 	return false, nil
 }
 
+// repRankAll queries the database for all users, orders them by rep and sends a table with this info to the channel
 func repRankAll(m *discordgo.MessageCreate, s *discordgo.Session) {
-	db, _ := sql.Open("sqlite3", datasource)
-	defer db.Close()
 
 	t := table.NewWriter()
 	t.AppendHeader(table.Row{"Rep", "User"})
 
-	rows, _ := db.Query(getRank)
+	rows, _ := client.db.Query(getRank)
 
 	var userName string
 	var repValue int
@@ -161,11 +261,9 @@ func repRankAll(m *discordgo.MessageCreate, s *discordgo.Session) {
 }
 
 func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session) {
-	db, _ := sql.Open("sqlite3", datasource)
-	defer db.Close()
 
 	// Check if user exists
-	usercheck, err := checkUser(u, db)
+	usercheck, err := checkUser(u, client.db)
 	if err != nil {
 		log.Printf("Something broke with userCheck: %s", err)
 		return
@@ -173,7 +271,7 @@ func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session)
 
 	// User doesn't exist yet
 	if usercheck == false {
-		statement, err := db.Prepare(initRep)
+		statement, err := client.db.Prepare(createUser)
 		if err != nil {
 			log.Printf("Unable to prepare sql statement for initRep: %s", err)
 			s.ChannelMessageSend(m.ChannelID, "Could not initialize new user "+u.Username)
@@ -191,7 +289,7 @@ func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session)
 	}
 
 	// User already exists
-	statement, err := db.Prepare(setRep)
+	statement, err := client.db.Prepare(setRep)
 	if err != nil {
 		log.Printf("Unable to prepare sql statement for repInc: %s", err)
 		s.ChannelMessageSend(m.ChannelID, "Could not update rep for "+u.Username)
@@ -205,7 +303,7 @@ func repInc(u *discordgo.User, m *discordgo.MessageCreate, s *discordgo.Session)
 		return
 	}
 
-	rows, _ := db.Query(getRep, u.ID)
+	rows, _ := client.db.Query(getRep, u.ID)
 	var repValue int
 	for rows.Next() {
 		rows.Scan(&repValue)
@@ -219,7 +317,7 @@ func checkTable(db *sql.DB) (bool, error) {
 	var table string = "reputation"
 	var t string
 
-	rows, _ := db.Query(checkDb)
+	rows, _ := db.Query(getTbl)
 	for rows.Next() {
 		rows.Scan(&t)
 	}
@@ -231,43 +329,11 @@ func checkTable(db *sql.DB) (bool, error) {
 	return false, nil
 }
 
-// dbInit creates the "reputation" table with the schema described in the initDB constant
-func dbInit(db *sql.DB) error {
-	_, err := db.Exec(initDb)
+// createTable creates the "reputation" table with the schema described in the initDB constant
+func createTable(d *sql.DB) error {
+	_, err := d.Exec(createTbl)
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-// dbCheck opens a db connection, checks to see if the right table exists, and creates one if not
-func dbCheck() error {
-	db, err := sql.Open("sqlite3", datasource)
-	defer db.Close()
-	if err != nil {
-		return err
-	}
-
-	tableExists, err := checkTable(db)
-	if err != nil {
-		return err
-	}
-
-	if !tableExists {
-		log.Printf("No table 'reputation' found, creating...")
-		err := dbInit(db)
-		if err != nil {
-			return err
-		}
-	}
-
-	tableExists, err = checkTable(db)
-	if err != nil {
-		return err
-	}
-	if !tableExists {
-		return errors.New("Database setup failed: table creation failed")
 	}
 
 	return nil

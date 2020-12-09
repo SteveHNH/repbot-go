@@ -1,3 +1,4 @@
 repbot-go
 .vscode
-rep.db
+*.db
+*.db*
