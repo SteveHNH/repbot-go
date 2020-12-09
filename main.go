@@ -21,7 +21,7 @@ import (
 const setRep = `UPDATE reputation SET rep = rep + 1, user = ? WHERE username = ?`
 const getRep = `SELECT rep FROM reputation WHERE username = ?`
 const initRep = `INSERT OR IGNORE into reputation (username, user, rep) values (?, ?, ?)`
-const getRank = `SELECT user, rep from reputation ORDER BY rep DESC, user ASC`
+const getRank = `SELECT user, rep from reputation ORDER BY rep DESC, user ASC LIMIT 10`
 const checkDb = `SELECT name FROM sqlite_master WHERE type='table' AND name='reputation';`
 const initDb = `CREATE TABLE reputation (username TEXT PRIMARY KEY, rep INTEGER DEFAULT 0, user VARCHAR);`
 
