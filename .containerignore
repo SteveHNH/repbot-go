@@ -1,0 +1,10 @@
+repbot-go
+botconfig
+*.db
+*.db-shm
+*.db-wal
+.git
+.gitignore
+.vscode
+Containerfile
+.containerignore

@@ -18,13 +18,21 @@ type Config struct {
 func Get(configFile string) *Config {
 	options := viper.New()
 
+	// Env vars override or substitute config file values
+	options.BindEnv("token", "REPBOT_TOKEN")
+	options.BindEnv("db", "REPBOT_DB")
+	options.SetDefault("db", "/data/rep.db")
+
 	envConfig := os.Getenv("REPBOT_CONFIG")
+	explicitConfig := false
 
 	if configFile != "" {
 		options.SetConfigFile(configFile)
+		explicitConfig = true
 	} else if envConfig != "" {
 		e, _ := tilde.Expand(envConfig)
 		options.SetConfigFile(e)
+		explicitConfig = true
 	} else {
 		log.Println("searching for configfile...")
 		options.SetConfigName("botconfig")
@@ -35,12 +43,20 @@ func Get(configFile string) *Config {
 	options.SetConfigType("yaml")
 
 	if err := options.ReadInConfig(); err != nil {
-		// Log the error and exit if the config file cannot be parsed
-		log.Fatal(err)
+		if explicitConfig {
+			log.Fatalf("config: failed to read explicit config file: %v", err)
+		}
+		log.Printf("config: no config file found, relying on environment variables: %v", err)
 	}
 
-	return &Config{
+	cfg := &Config{
 		Token: options.GetString("token"),
 		DB:    options.GetString("db"),
 	}
+
+	if cfg.Token == "" {
+		log.Fatal("config: token is required but was not found in config file or REPBOT_TOKEN env var")
+	}
+
+	return cfg
 }
