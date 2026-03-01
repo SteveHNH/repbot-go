@@ -105,6 +105,7 @@ func updateUsers() {
 		u, err := client.ds.User(userName)
 		if err != nil {
 			log.Printf("Error retrieving user details: %s\n", err)
+			continue
 		}
 
 		if u.Username != user {
