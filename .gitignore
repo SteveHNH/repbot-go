@@ -1,4 +1,5 @@
 repbot-go
+botconfig
 .vscode
 *.db
 *.db*
