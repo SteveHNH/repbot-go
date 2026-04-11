@@ -216,8 +216,13 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	if reRepRank.MatchString(m.Content) {
-		log.Printf("Rank request received")
-		repRankAll(m, s)
+		if len(m.Mentions) > 0 {
+			log.Printf("Rank request for user received")
+			repRankUser(m, s)
+		} else {
+			log.Printf("Rank request received")
+			repRankAll(m, s)
+		}
 		return
 	}
 
@@ -285,6 +290,30 @@ func repRankAll(m *discordgo.MessageCreate, s *discordgo.Session) {
 
 	t.SetStyle(table.StyleLight)
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```\n%s\n```", t.Render()))
+}
+
+// repRankUser reports the rep and leaderboard rank for a specific mentioned user.
+func repRankUser(m *discordgo.MessageCreate, s *discordgo.Session) {
+	u := m.Mentions[0]
+
+	var rep int
+	if err := client.db.QueryRow(getRep, u.ID).Scan(&rep); err != nil {
+		if err == sql.ErrNoRows {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s has no rep yet.", u.Username))
+		} else {
+			log.Printf("error querying rep for repRankUser: %s", err)
+		}
+		return
+	}
+
+	var rank int
+	if err := client.db.QueryRow(getUserRank, rep).Scan(&rank); err != nil {
+		log.Printf("error querying rank for repRankUser: %s", err)
+		return
+	}
+
+	s.ChannelMessageSend(m.ChannelID,
+		fmt.Sprintf("%s's rep is %d | Rank: #%d", u.Username, rep, rank))
 }
 
 func repInc(u *discordgo.User, channelID string, s *discordgo.Session) {

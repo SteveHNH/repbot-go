@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- `!rep rank @username` command shows a specific user's rep and leaderboard rank
 - `LODLove01` emoji reaction gives rep to the message author; self-rep and bot messages are ignored
 - `!rep me` command shows the caller's current rep and numeric leaderboard rank
 - Milestone announcements when a user hits 10, 25, 50, 100, 200, 300, 400, or 500 rep
