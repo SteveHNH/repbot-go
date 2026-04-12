@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Token string
 	DB    string
+	Emoji string
 }
 
 // Get reads in the config file and returns a struct
@@ -21,7 +22,9 @@ func Get(configFile string) *Config {
 	// Env vars override or substitute config file values
 	options.BindEnv("token", "REPBOT_TOKEN")
 	options.BindEnv("db", "REPBOT_DB")
+	options.BindEnv("emoji", "REPBOT_EMOJI")
 	options.SetDefault("db", "/data/rep.db")
+	options.SetDefault("emoji", "LODLove01")
 
 	envConfig := os.Getenv("REPBOT_CONFIG")
 	explicitConfig := false
@@ -52,6 +55,7 @@ func Get(configFile string) *Config {
 	cfg := &Config{
 		Token: options.GetString("token"),
 		DB:    options.GetString("db"),
+		Emoji: options.GetString("emoji"),
 	}
 
 	if cfg.Token == "" {

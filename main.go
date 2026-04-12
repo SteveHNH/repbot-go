@@ -418,12 +418,12 @@ func createTable(d *sql.DB) error {
 }
 
 // messageReactionAdd fires when any reaction is added to a message.
-// Reacting with LODLove01 gives rep to the message author.
+// Reacting with the configured emoji gives rep to the message author.
 func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 	if r.UserID == s.State.User.ID {
 		return
 	}
-	if r.Emoji.Name != "LODLove01" {
+	if r.Emoji.Name != client.cfg.Emoji {
 		return
 	}
 	msg, err := s.ChannelMessage(r.ChannelID, r.MessageID)

@@ -35,6 +35,7 @@ Priority order (highest wins): CLI flag > `REPBOT_CONFIG` env var > `$HOME/.conf
 |----------------|--------------------------------|----------------|
 | `REPBOT_TOKEN` | Discord bot token (required)   | —              |
 | `REPBOT_DB`    | Path to SQLite database file   | `/data/rep.db` |
+| `REPBOT_EMOJI` | Emoji name for rep reactions   | `LODLove01`    |
 | `REPBOT_CONFIG`| Path to YAML config file       | —              |
 
 Config file format (YAML):
@@ -71,7 +72,7 @@ All SQL constants are defined at the top of `main.go`. Do not add a migration to
 | `!rep me`            | Show calling user's own rep and rank                  |
 | `!rep ping`          | Health check — responds `pong`                        |
 
-Emoji reaction: reacting to any message with the `LODLove01` custom emoji gives the message author +1 rep.
+Emoji reaction: reacting to any message with the configured emoji (default `LODLove01`) gives the message author +1 rep. Configurable via `REPBOT_EMOJI` env var or `emoji` config key.
 
 ## Rank titles
 
